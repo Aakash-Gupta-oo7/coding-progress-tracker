@@ -13,7 +13,16 @@ import {
   insertSearchHistorySchema,
   insertContestSchema,
   insertContestParticipationSchema,
-  ContestCreateData
+  ContestCreateData,
+  // New schema imports for groups feature
+  insertGroupSchema,
+  insertGroupMemberSchema,
+  insertSharedListSchema,
+  insertSharedListQuestionSchema,
+  insertPrivateTestSchema,
+  insertTestQuestionSchema,
+  insertTestParticipantSchema,
+  insertTestSubmissionSchema
 } from "@shared/schema";
 import { z } from "zod";
 import { exec } from "child_process";
@@ -696,6 +705,631 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (storageError) {
         next(storageError);
       }
+    }
+  });
+
+  // Group management endpoints
+  app.post("/api/groups", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+      
+      const parsedData = insertGroupSchema.parse(req.body);
+      const group = await storage.createGroup(req.user!.id, parsedData);
+      res.status(201).json(group);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/groups", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+      
+      const groups = await storage.getUserGroups(req.user!.id);
+      res.json(groups);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/groups/:groupId", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+      
+      const groupId = parseInt(req.params.groupId);
+      if (isNaN(groupId)) {
+        return res.status(400).json({ message: "Invalid group ID" });
+      }
+      
+      const group = await storage.getGroup(groupId);
+      if (!group) {
+        return res.status(404).json({ message: "Group not found" });
+      }
+      
+      // Check if user is a member of the group
+      const member = await storage.getGroupMember(groupId, req.user!.id);
+      if (!member) {
+        return res.status(403).json({ message: "You are not a member of this group" });
+      }
+      
+      // Get members and lists
+      const members = await storage.getGroupMembers(groupId);
+      const sharedLists = await storage.getGroupSharedLists(groupId);
+      const privateTests = await storage.getGroupPrivateTests(groupId);
+      
+      // Map user info to members
+      const membersWithUserInfo = await Promise.all(members.map(async (member) => {
+        const user = await storage.getUser(member.userId);
+        return {
+          ...member,
+          username: user?.username
+        };
+      }));
+      
+      res.json({
+        group,
+        members: membersWithUserInfo,
+        sharedLists,
+        privateTests
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.put("/api/groups/:groupId", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+      
+      const groupId = parseInt(req.params.groupId);
+      if (isNaN(groupId)) {
+        return res.status(400).json({ message: "Invalid group ID" });
+      }
+      
+      // Check if user is an admin or owner
+      const member = await storage.getGroupMember(groupId, req.user!.id);
+      if (!member || (member.role !== "admin" && member.role !== "owner")) {
+        return res.status(403).json({ message: "You don't have permission to update this group" });
+      }
+      
+      const parsedData = insertGroupSchema.parse(req.body);
+      const group = await storage.updateGroup(groupId, parsedData);
+      res.json(group);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.delete("/api/groups/:groupId", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+      
+      const groupId = parseInt(req.params.groupId);
+      if (isNaN(groupId)) {
+        return res.status(400).json({ message: "Invalid group ID" });
+      }
+      
+      // Check if user is the owner
+      const member = await storage.getGroupMember(groupId, req.user!.id);
+      if (!member || member.role !== "owner") {
+        return res.status(403).json({ message: "Only group owners can delete groups" });
+      }
+      
+      await storage.deleteGroup(groupId);
+      res.sendStatus(204);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Group invitation endpoints
+  app.get("/api/groups/join/:inviteCode", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+      
+      const inviteCode = req.params.inviteCode;
+      
+      const group = await storage.getGroupByInviteCode(inviteCode);
+      if (!group) {
+        return res.status(404).json({ message: "Invalid invite code" });
+      }
+      
+      // Check if user is already a member
+      const existingMember = await storage.getGroupMember(group.id, req.user!.id);
+      if (existingMember) {
+        return res.status(400).json({ message: "You are already a member of this group" });
+      }
+      
+      // Add user as a member
+      await storage.addGroupMember({
+        groupId: group.id,
+        userId: req.user!.id,
+        role: "member"
+      });
+      
+      res.status(200).json({ message: "Successfully joined the group", groupId: group.id });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Group members management
+  app.post("/api/groups/:groupId/members", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+      
+      const groupId = parseInt(req.params.groupId);
+      if (isNaN(groupId)) {
+        return res.status(400).json({ message: "Invalid group ID" });
+      }
+      
+      // Check if user is an admin or owner
+      const member = await storage.getGroupMember(groupId, req.user!.id);
+      if (!member || (member.role !== "admin" && member.role !== "owner")) {
+        return res.status(403).json({ message: "You don't have permission to add members" });
+      }
+      
+      const { userId, role } = req.body;
+      if (!userId || !role) {
+        return res.status(400).json({ message: "User ID and role are required" });
+      }
+      
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      const newMember = await storage.addGroupMember({
+        groupId,
+        userId,
+        role
+      });
+      
+      res.status(201).json(newMember);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.put("/api/groups/:groupId/members/:userId", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+      
+      const groupId = parseInt(req.params.groupId);
+      const userId = parseInt(req.params.userId);
+      
+      if (isNaN(groupId) || isNaN(userId)) {
+        return res.status(400).json({ message: "Invalid IDs" });
+      }
+      
+      // Check if current user is an admin or owner
+      const currentMember = await storage.getGroupMember(groupId, req.user!.id);
+      if (!currentMember || (currentMember.role !== "admin" && currentMember.role !== "owner")) {
+        return res.status(403).json({ message: "You don't have permission to update member roles" });
+      }
+      
+      // Check if target is a member
+      const targetMember = await storage.getGroupMember(groupId, userId);
+      if (!targetMember) {
+        return res.status(404).json({ message: "Member not found" });
+      }
+      
+      // Owner can only be updated by other owners
+      if (targetMember.role === "owner" && currentMember.role !== "owner") {
+        return res.status(403).json({ message: "Only owners can update other owners" });
+      }
+      
+      const { role } = req.body;
+      if (!role) {
+        return res.status(400).json({ message: "Role is required" });
+      }
+      
+      const updatedMember = await storage.updateGroupMemberRole(groupId, userId, role);
+      res.json(updatedMember);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.delete("/api/groups/:groupId/members/:userId", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+      
+      const groupId = parseInt(req.params.groupId);
+      const userId = parseInt(req.params.userId);
+      
+      if (isNaN(groupId) || isNaN(userId)) {
+        return res.status(400).json({ message: "Invalid IDs" });
+      }
+      
+      // Users can remove themselves
+      if (userId === req.user!.id) {
+        await storage.removeGroupMember(groupId, userId);
+        return res.sendStatus(204);
+      }
+      
+      // Otherwise, check if current user is an admin or owner
+      const currentMember = await storage.getGroupMember(groupId, req.user!.id);
+      if (!currentMember || (currentMember.role !== "admin" && currentMember.role !== "owner")) {
+        return res.status(403).json({ message: "You don't have permission to remove members" });
+      }
+      
+      // Check if target is a member
+      const targetMember = await storage.getGroupMember(groupId, userId);
+      if (!targetMember) {
+        return res.status(404).json({ message: "Member not found" });
+      }
+      
+      // Owner can only be removed by other owners
+      if (targetMember.role === "owner" && currentMember.role !== "owner") {
+        return res.status(403).json({ message: "Only owners can remove other owners" });
+      }
+      
+      await storage.removeGroupMember(groupId, userId);
+      res.sendStatus(204);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Shared Lists endpoints
+  app.post("/api/groups/:groupId/shared-lists", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+      
+      const groupId = parseInt(req.params.groupId);
+      if (isNaN(groupId)) {
+        return res.status(400).json({ message: "Invalid group ID" });
+      }
+      
+      // Check if user is a member of the group
+      const member = await storage.getGroupMember(groupId, req.user!.id);
+      if (!member) {
+        return res.status(403).json({ message: "You are not a member of this group" });
+      }
+      
+      const parsedData = insertSharedListSchema.parse({
+        ...req.body,
+        groupId
+      });
+      
+      const sharedList = await storage.createSharedList(req.user!.id, parsedData);
+      res.status(201).json(sharedList);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/shared-lists/:listId", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+      
+      const listId = parseInt(req.params.listId);
+      if (isNaN(listId)) {
+        return res.status(400).json({ message: "Invalid list ID" });
+      }
+      
+      const list = await storage.getSharedList(listId);
+      if (!list) {
+        return res.status(404).json({ message: "Shared list not found" });
+      }
+      
+      // Check if user is a member of the group
+      const member = await storage.getGroupMember(list.groupId, req.user!.id);
+      if (!member) {
+        return res.status(403).json({ message: "You don't have access to this shared list" });
+      }
+      
+      // Get questions and user progress
+      const questions = await storage.getSharedListQuestions(listId);
+      const progress = await storage.getSharedListProgress(listId, req.user!.id);
+      
+      res.json({
+        list,
+        questions,
+        progress
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/shared-lists/:listId/questions", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+      
+      const listId = parseInt(req.params.listId);
+      if (isNaN(listId)) {
+        return res.status(400).json({ message: "Invalid list ID" });
+      }
+      
+      const list = await storage.getSharedList(listId);
+      if (!list) {
+        return res.status(404).json({ message: "Shared list not found" });
+      }
+      
+      // Check if user is a member of the group
+      const member = await storage.getGroupMember(list.groupId, req.user!.id);
+      if (!member) {
+        return res.status(403).json({ message: "You don't have access to this shared list" });
+      }
+      
+      const parsedData = insertSharedListQuestionSchema.parse({
+        ...req.body,
+        listId
+      });
+      
+      const question = await storage.addSharedListQuestion(req.user!.id, parsedData);
+      res.status(201).json(question);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/shared-lists/:listId/questions/:questionId/progress", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+      
+      const listId = parseInt(req.params.listId);
+      const questionId = parseInt(req.params.questionId);
+      
+      if (isNaN(listId) || isNaN(questionId)) {
+        return res.status(400).json({ message: "Invalid IDs" });
+      }
+      
+      const list = await storage.getSharedList(listId);
+      if (!list) {
+        return res.status(404).json({ message: "Shared list not found" });
+      }
+      
+      // Check if user is a member of the group
+      const member = await storage.getGroupMember(list.groupId, req.user!.id);
+      if (!member) {
+        return res.status(403).json({ message: "You don't have access to this shared list" });
+      }
+      
+      const { isSolved } = req.body;
+      if (isSolved === undefined) {
+        return res.status(400).json({ message: "isSolved field is required" });
+      }
+      
+      const progress = await storage.updateQuestionProgress(req.user!.id, questionId, isSolved);
+      res.json(progress);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Private Tests endpoints
+  app.post("/api/groups/:groupId/tests", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+      
+      const groupId = parseInt(req.params.groupId);
+      if (isNaN(groupId)) {
+        return res.status(400).json({ message: "Invalid group ID" });
+      }
+      
+      // Check if user is an admin or owner
+      const member = await storage.getGroupMember(groupId, req.user!.id);
+      if (!member || (member.role !== "admin" && member.role !== "owner")) {
+        return res.status(403).json({ message: "Only admins and owners can create tests" });
+      }
+      
+      const parsedData = insertPrivateTestSchema.parse({
+        ...req.body,
+        groupId
+      });
+      
+      const test = await storage.createPrivateTest(req.user!.id, parsedData);
+      res.status(201).json(test);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/tests/:testId", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+      
+      const testId = parseInt(req.params.testId);
+      if (isNaN(testId)) {
+        return res.status(400).json({ message: "Invalid test ID" });
+      }
+      
+      const test = await storage.getPrivateTest(testId);
+      if (!test) {
+        return res.status(404).json({ message: "Test not found" });
+      }
+      
+      // Check if user is a member of the group
+      const member = await storage.getGroupMember(test.groupId, req.user!.id);
+      if (!member) {
+        return res.status(403).json({ message: "You don't have access to this test" });
+      }
+      
+      // Get questions
+      const questions = await storage.getTestQuestions(testId);
+      
+      // Get participants and submissions for admin/owner view
+      let participants = [];
+      let results = null;
+      
+      if (member.role === "admin" || member.role === "owner") {
+        participants = await storage.getTestParticipants(testId);
+        results = await storage.getTestResults(testId);
+      }
+      
+      // Get user's own submissions
+      const userSubmissions = await storage.getUserTestSubmissions(testId, req.user!.id);
+      
+      // Format dates for client use
+      const formattedTest = {
+        ...test,
+        startTime: test.startTime.toISOString()
+      };
+      
+      res.json({
+        test: formattedTest,
+        questions,
+        participants,
+        results,
+        userSubmissions
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/tests/:testId/questions", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+      
+      const testId = parseInt(req.params.testId);
+      if (isNaN(testId)) {
+        return res.status(400).json({ message: "Invalid test ID" });
+      }
+      
+      const test = await storage.getPrivateTest(testId);
+      if (!test) {
+        return res.status(404).json({ message: "Test not found" });
+      }
+      
+      // Check if user is an admin or owner
+      const member = await storage.getGroupMember(test.groupId, req.user!.id);
+      if (!member || (member.role !== "admin" && member.role !== "owner")) {
+        return res.status(403).json({ message: "Only admins and owners can add test questions" });
+      }
+      
+      // Batch process question additions
+      const questions = req.body.questions;
+      if (!Array.isArray(questions) || questions.length === 0) {
+        return res.status(400).json({ message: "Questions array is required" });
+      }
+      
+      // Add testId to each question
+      const questionsWithTestId = questions.map(q => ({
+        ...q,
+        testId
+      }));
+      
+      const addedQuestions = await storage.addTestQuestions(questionsWithTestId);
+      res.status(201).json(addedQuestions);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/tests/:testId/participate", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+      
+      const testId = parseInt(req.params.testId);
+      if (isNaN(testId)) {
+        return res.status(400).json({ message: "Invalid test ID" });
+      }
+      
+      const test = await storage.getPrivateTest(testId);
+      if (!test) {
+        return res.status(404).json({ message: "Test not found" });
+      }
+      
+      // Check if user is a member of the group
+      const member = await storage.getGroupMember(test.groupId, req.user!.id);
+      if (!member) {
+        return res.status(403).json({ message: "You don't have access to this test" });
+      }
+      
+      // Can't join if test is completed
+      if (test.status === "completed") {
+        return res.status(400).json({ message: "Cannot join a completed test" });
+      }
+      
+      const participant = await storage.addTestParticipant(req.user!.id, { testId });
+      res.status(201).json(participant);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/tests/:testId/submit", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+      
+      const testId = parseInt(req.params.testId);
+      if (isNaN(testId)) {
+        return res.status(400).json({ message: "Invalid test ID" });
+      }
+      
+      const test = await storage.getPrivateTest(testId);
+      if (!test) {
+        return res.status(404).json({ message: "Test not found" });
+      }
+      
+      // Check if user is a member of the group
+      const member = await storage.getGroupMember(test.groupId, req.user!.id);
+      if (!member) {
+        return res.status(403).json({ message: "You don't have access to this test" });
+      }
+      
+      // Check if user is a participant
+      const participant = await storage.getTestParticipants(testId)
+        .then(participants => participants.find(p => p.userId === req.user!.id));
+      
+      if (!participant) {
+        return res.status(400).json({ message: "You need to join the test before submitting" });
+      }
+      
+      const { questionId, isCorrect } = req.body;
+      if (questionId === undefined || isCorrect === undefined) {
+        return res.status(400).json({ message: "questionId and isCorrect fields are required" });
+      }
+      
+      const submission = await storage.addTestSubmission(req.user!.id, {
+        testId,
+        questionId,
+        isCorrect
+      });
+      
+      res.status(201).json(submission);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.put("/api/tests/:testId/status", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+      
+      const testId = parseInt(req.params.testId);
+      if (isNaN(testId)) {
+        return res.status(400).json({ message: "Invalid test ID" });
+      }
+      
+      const test = await storage.getPrivateTest(testId);
+      if (!test) {
+        return res.status(404).json({ message: "Test not found" });
+      }
+      
+      // Check if user is an admin or owner
+      const member = await storage.getGroupMember(test.groupId, req.user!.id);
+      if (!member || (member.role !== "admin" && member.role !== "owner")) {
+        return res.status(403).json({ message: "Only admins and owners can update test status" });
+      }
+      
+      const { status } = req.body;
+      if (!status) {
+        return res.status(400).json({ message: "Status field is required" });
+      }
+      
+      if (!["scheduled", "active", "completed"].includes(status)) {
+        return res.status(400).json({ message: "Invalid status value" });
+      }
+      
+      const updatedTest = await storage.updatePrivateTestStatus(testId, status);
+      res.json(updatedTest);
+    } catch (error) {
+      next(error);
     }
   });
 

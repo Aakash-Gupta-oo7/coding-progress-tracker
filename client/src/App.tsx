@@ -12,6 +12,10 @@ import ComparePage from "@/pages/compare-page";
 import ListsPage from "@/pages/lists-page";
 import ListDetailPage from "@/pages/list-detail-page";
 import StatsPage from "@/pages/stats-page";
+import GroupsPage from "@/pages/groups-page";
+import GroupDetailPage from "@/pages/group-detail-page";
+import SharedListPage from "@/pages/shared-list-page";
+import TestDetailPage from "@/pages/test-detail-page";
 import { ProtectedRoute } from "./lib/protected-route";
 import { useEffect, useState } from "react";
 
@@ -26,6 +30,10 @@ function Router() {
       <ProtectedRoute path="/lists" component={ListsPage} />
       <ProtectedRoute path="/lists/:listId" component={ListDetailPage} />
       <ProtectedRoute path="/stats" component={StatsPage} />
+      <ProtectedRoute path="/groups" component={GroupsPage} />
+      <ProtectedRoute path="/groups/:groupId" component={GroupDetailPage} />
+      <ProtectedRoute path="/shared-lists/:listId" component={SharedListPage} />
+      <ProtectedRoute path="/tests/:testId" component={TestDetailPage} />
       {/* Fallback to 404 */}
       <Route component={NotFound} />
     </Switch>

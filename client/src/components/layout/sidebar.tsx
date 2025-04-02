@@ -14,7 +14,8 @@ import {
   Terminal, 
   Menu, 
   X,
-  PieChart
+  PieChart,
+  Users
 } from "lucide-react";
 
 interface SidebarProps {
@@ -45,6 +46,11 @@ export default function Sidebar({ className }: SidebarProps) {
       href: "/lists", 
       label: "Question Lists", 
       icon: <List className="mr-3 text-lg" /> 
+    },
+    { 
+      href: "/groups", 
+      label: "Study Groups", 
+      icon: <Users className="mr-3 text-lg" /> 
     },
     { 
       href: "/stats", 
