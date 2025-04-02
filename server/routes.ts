@@ -6,6 +6,7 @@ import { fetchLeetcodeData } from "./platforms/leetcode";
 import { fetchCodeforcesData } from "./platforms/codeforces";
 import { fetchGFGData } from "./platforms/geeksforgeeks";
 import { searchLeetCodeQuestions } from "./data/leetcode-questions";
+import { searchCodeForcesQuestions } from "./data/codeforces-questions";
 import { 
   insertQuestionListSchema,
   insertQuestionSchema,
@@ -388,6 +389,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const query = req.query.q as string || "";
       const questions = searchLeetCodeQuestions(query);
+      res.json(questions);
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  // CodeForces questions database endpoint
+  app.get("/api/codeforces/questions", async (req, res, next) => {
+    try {
+      const query = req.query.q as string || "";
+      const questions = searchCodeForcesQuestions(query);
       res.json(questions);
     } catch (error) {
       next(error);

@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useLeetCodeQuestions } from "@/hooks/use-leetcode-questions";
+import { useCodeForcesQuestions } from "@/hooks/use-codeforces-questions";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { 
@@ -32,11 +33,11 @@ interface AddQuestionDialogProps {
 }
 
 export function AddQuestionDialog({ open, onOpenChange, listId }: AddQuestionDialogProps) {
-  const [tab, setTab] = useState<"search" | "manual" | "url">("search");
+  const [tab, setTab] = useState<"leetcode" | "codeforces" | "manual" | "url">("leetcode");
   const [manualQuestion, setManualQuestion] = useState({
     title: "",
     difficulty: "medium",
-    link: "",
+    url: "",
     platform: "leetcode"
   });
   const [urlInput, setUrlInput] = useState("");
@@ -45,11 +46,19 @@ export function AddQuestionDialog({ open, onOpenChange, listId }: AddQuestionDia
   
   // LeetCode questions search
   const { 
-    questions, 
-    isLoading: isQuestionsLoading, 
-    setSearchQuery, 
-    searchQuery 
+    questions: leetcodeQuestions, 
+    isLoading: isLeetCodeLoading, 
+    setSearchQuery: setLeetCodeSearchQuery, 
+    searchQuery: leetcodeSearchQuery 
   } = useLeetCodeQuestions();
+  
+  // CodeForces questions search
+  const {
+    questions: codeforcesQuestions,
+    isLoading: isCodeForcesLoading,
+    setSearchQuery: setCodeForcesSearchQuery,
+    searchQuery: codeforcesSearchQuery
+  } = useCodeForcesQuestions();
   
   // Mutation for adding a question
   const addQuestionMutation = useMutation({
@@ -83,7 +92,7 @@ export function AddQuestionDialog({ open, onOpenChange, listId }: AddQuestionDia
     let questionData = {
       title: "",
       difficulty: "medium",
-      link: url,
+      url: url,
       platform: ""
     };
     
@@ -124,18 +133,28 @@ export function AddQuestionDialog({ open, onOpenChange, listId }: AddQuestionDia
   const handleAddFromSearch = (question: any) => {
     addQuestionMutation.mutate({
       title: question.title,
-      link: question.link,
+      url: question.link, // LeetCode questions use 'link' for URL
       platform: "leetcode",
       difficulty: question.difficulty,
       solved: false
     });
   };
   
+  const handleAddCodeForcesQuestion = (question: any) => {
+    addQuestionMutation.mutate({
+      title: question.title,
+      url: question.url,
+      platform: "codeforces",
+      difficulty: question.difficulty || "medium", // CodeForces may not have difficulty info
+      solved: false
+    });
+  };
+  
   const handleAddManual = () => {
-    if (!manualQuestion.title || !manualQuestion.link) {
+    if (!manualQuestion.title || !manualQuestion.url) {
       toast({
         title: "Missing information",
-        description: "Please provide both title and link",
+        description: "Please provide both title and URL",
         variant: "destructive"
       });
       return;
@@ -182,26 +201,27 @@ export function AddQuestionDialog({ open, onOpenChange, listId }: AddQuestionDia
         </DialogHeader>
         
         <Tabs value={tab} onValueChange={(value) => setTab(value as any)} className="w-full">
-          <TabsList className="grid grid-cols-3 w-full">
-            <TabsTrigger value="search">Search LeetCode</TabsTrigger>
+          <TabsList className="grid grid-cols-4 w-full">
+            <TabsTrigger value="leetcode">LeetCode</TabsTrigger>
+            <TabsTrigger value="codeforces">CodeForces</TabsTrigger>
             <TabsTrigger value="url">Add from URL</TabsTrigger>
             <TabsTrigger value="manual">Add Manually</TabsTrigger>
           </TabsList>
           
-          <TabsContent value="search" className="mt-4">
+          <TabsContent value="leetcode" className="mt-4">
             <div className="space-y-4">
               <div className="flex items-center space-x-2">
                 <Search className="w-4 h-4" />
                 <Input 
                   placeholder="Search LeetCode questions by title, number, or difficulty" 
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  value={leetcodeSearchQuery}
+                  onChange={(e) => setLeetCodeSearchQuery(e.target.value)}
                   className="flex-1"
                 />
               </div>
               
               <ScrollArea className="h-[400px] border rounded-md">
-                {isQuestionsLoading ? (
+                {isLeetCodeLoading ? (
                   <div className="space-y-2 p-4">
                     {[...Array(5)].map((_, i) => (
                       <div key={i} className="flex items-center space-x-4">
@@ -209,13 +229,13 @@ export function AddQuestionDialog({ open, onOpenChange, listId }: AddQuestionDia
                       </div>
                     ))}
                   </div>
-                ) : questions.length === 0 ? (
+                ) : leetcodeQuestions.length === 0 ? (
                   <div className="text-center p-8 text-muted-foreground">
                     No questions found
                   </div>
                 ) : (
                   <div className="space-y-2 p-2">
-                    {questions.map((question) => (
+                    {leetcodeQuestions.map((question) => (
                       <div 
                         key={question.questionNumber}
                         className="flex items-center justify-between p-3 rounded-md hover:bg-secondary/50 cursor-pointer border"
@@ -260,6 +280,87 @@ export function AddQuestionDialog({ open, onOpenChange, listId }: AddQuestionDia
                           onClick={(e) => {
                             e.stopPropagation();
                             handleAddFromSearch(question);
+                          }}
+                        >
+                          Add
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </ScrollArea>
+            </div>
+          </TabsContent>
+          
+          <TabsContent value="codeforces" className="mt-4">
+            <div className="space-y-4">
+              <div className="flex items-center space-x-2">
+                <Search className="w-4 h-4" />
+                <Input 
+                  placeholder="Search CodeForces problems by ID or title" 
+                  value={codeforcesSearchQuery}
+                  onChange={(e) => setCodeForcesSearchQuery(e.target.value)}
+                  className="flex-1"
+                />
+              </div>
+              
+              <ScrollArea className="h-[400px] border rounded-md">
+                {isCodeForcesLoading ? (
+                  <div className="space-y-2 p-4">
+                    {[...Array(5)].map((_, i) => (
+                      <div key={i} className="flex items-center space-x-4">
+                        <Skeleton className="h-12 w-full" />
+                      </div>
+                    ))}
+                  </div>
+                ) : codeforcesQuestions.length === 0 ? (
+                  <div className="text-center p-8 text-muted-foreground">
+                    No questions found
+                  </div>
+                ) : (
+                  <div className="space-y-2 p-2">
+                    {codeforcesQuestions.map((question) => (
+                      <div 
+                        key={question.problemId}
+                        className="flex items-center justify-between p-3 rounded-md hover:bg-secondary/50 cursor-pointer border"
+                        onClick={() => handleAddCodeForcesQuestion(question)}
+                      >
+                        <div className="flex flex-col">
+                          <div className="flex items-center space-x-2">
+                            <span className="text-sm font-medium">{question.problemId} - {question.title}</span>
+                          </div>
+                          <div className="flex space-x-2 text-xs text-muted-foreground mt-1">
+                            {question.difficulty && (
+                              <Badge 
+                                variant="outline" 
+                                className={
+                                  question.difficulty === 'easy' 
+                                    ? 'bg-green-100 text-green-800 border-green-300' 
+                                    : question.difficulty === 'medium'
+                                      ? 'bg-yellow-100 text-yellow-800 border-yellow-300'
+                                      : 'bg-red-100 text-red-800 border-red-300'
+                                }
+                              >
+                                {question.difficulty.charAt(0).toUpperCase() + question.difficulty.slice(1)}
+                              </Badge>
+                            )}
+                            <a 
+                              href={question.url} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="flex items-center text-blue-600 hover:underline"
+                            >
+                              <ExternalLink className="w-3 h-3 mr-1" /> View
+                            </a>
+                          </div>
+                        </div>
+                        <Button 
+                          size="sm" 
+                          variant="secondary"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleAddCodeForcesQuestion(question);
                           }}
                         >
                           Add
@@ -344,12 +445,12 @@ export function AddQuestionDialog({ open, onOpenChange, listId }: AddQuestionDia
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="link">Link (Optional)</Label>
+                <Label htmlFor="url">URL (Optional)</Label>
                 <Input 
-                  id="link"
+                  id="url"
                   placeholder="https://leetcode.com/problems/two-sum/" 
-                  value={manualQuestion.link}
-                  onChange={(e) => setManualQuestion({...manualQuestion, link: e.target.value})}
+                  value={manualQuestion.url}
+                  onChange={(e) => setManualQuestion({...manualQuestion, url: e.target.value})}
                 />
               </div>
               
