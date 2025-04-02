@@ -10,6 +10,7 @@ import DashboardPage from "@/pages/dashboard-page";
 import ProfilePage from "@/pages/profile-page";
 import ComparePage from "@/pages/compare-page";
 import ListsPage from "@/pages/lists-page";
+import ListDetailPage from "@/pages/list-detail-page";
 import StatsPage from "@/pages/stats-page";
 import { ProtectedRoute } from "./lib/protected-route";
 import { useEffect, useState } from "react";
@@ -23,6 +24,7 @@ function Router() {
       <ProtectedRoute path="/dashboard" component={DashboardPage} />
       <ProtectedRoute path="/profile" component={ProfilePage} />
       <ProtectedRoute path="/lists" component={ListsPage} />
+      <ProtectedRoute path="/lists/:listId" component={ListDetailPage} />
       <ProtectedRoute path="/stats" component={StatsPage} />
       {/* Fallback to 404 */}
       <Route component={NotFound} />

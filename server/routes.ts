@@ -5,6 +5,7 @@ import { storage } from "./storage";
 import { fetchLeetcodeData } from "./platforms/leetcode";
 import { fetchCodeforcesData } from "./platforms/codeforces";
 import { fetchGFGData } from "./platforms/geeksforgeeks";
+import { searchLeetCodeQuestions } from "./data/leetcode-questions";
 import { 
   insertQuestionListSchema,
   insertQuestionSchema,
@@ -377,6 +378,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const question = await storage.markQuestionSolved(questionId, req.body.solved);
       res.json(question);
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  // LeetCode questions database endpoint
+  app.get("/api/leetcode/questions", async (req, res, next) => {
+    try {
+      const query = req.query.q as string || "";
+      const questions = searchLeetCodeQuestions(query);
+      res.json(questions);
     } catch (error) {
       next(error);
     }
