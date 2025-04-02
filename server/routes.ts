@@ -7,6 +7,8 @@ import { fetchCodeforcesData } from "./platforms/codeforces";
 import { fetchGFGData } from "./platforms/geeksforgeeks";
 import { insertQuestionListSchema, insertQuestionSchema, insertSearchHistorySchema } from "@shared/schema";
 import { z } from "zod";
+import { exec } from "child_process";
+import { promisify } from "util";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Sets up auth routes: /api/register, /api/login, /api/logout, /api/user
@@ -293,6 +295,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const question = await storage.markQuestionSolved(questionId, req.body.solved);
       res.json(question);
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  // Test endpoint for the Python LeetCode scraper
+  app.get("/api/test/scraper/leetcode/:username", async (req, res, next) => {
+    try {
+      const username = req.params.username;
+      if (!username) {
+        return res.status(400).json({ message: "Username is required" });
+      }
+      
+      try {
+        const { runLeetCodeScraper } = await import("./platforms/leetcode");
+        const result = await runLeetCodeScraper(username);
+        
+        res.json({
+          success: true,
+          data: result.data,
+          debug: result.debug
+        });
+        
+      } catch (error) {
+        res.status(500).json({ 
+          success: false,
+          error: (error as Error).message,
+          details: "The Python scraper failed. This is expected in the Replit environment, but the fallback mechanism should work."
+        });
+      }
     } catch (error) {
       next(error);
     }
