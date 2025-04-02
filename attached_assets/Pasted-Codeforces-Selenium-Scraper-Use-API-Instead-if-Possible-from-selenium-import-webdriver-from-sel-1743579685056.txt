@@ -1,0 +1,158 @@
+Codeforces Selenium Scraper (Use API Instead if Possible!)
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from selenium.common.exceptions import NoSuchElementException
+import time
+import json # To pretty-print the dictionary
+
+def get_codeforces_profile_selenium(handle):
+    """
+    Fetches user profile details from Codeforces using Selenium.
+
+    *** WARNING: Codeforces has a reliable API! ***
+    *** Use the API (https://codeforces.com/api/help) instead of this script ***
+    *** for better stability and performance, unless you specifically need ***
+    *** data ONLY visible on the rendered page. ***
+
+    Args:
+        handle: The Codeforces user handle.
+
+    Returns:
+        A dictionary containing scraped profile details, or None if the profile
+        cannot be accessed or a major scraping error occurs.
+        Returns "N/A" for fields that couldn't be found.
+    """
+    print("\n*** WARNING: Using Selenium for Codeforces. The official API is recommended! ***\n")
+
+    profile_url = f"https://codeforces.com/profile/{handle}"
+
+    # --- Selenium Setup ---
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+    chrome_options.add_argument("--window-size=1920,1080")
+
+    # --- IMPORTANT: Update this path to your ChromeDriver location ---
+    try:
+        # Assumes chromedriver is in your PATH or specify the service
+        # service = Service('/path/to/your/chromedriver') # Example
+        # driver = webdriver.Chrome(service=service, options=chrome_options)
+        driver = webdriver.Chrome(options=chrome_options) # Use this if chromedriver is in PATH
+    except Exception as e:
+        print(f"Error initializing WebDriver: {e}")
+        print("Please ensure ChromeDriver is installed and its path is correct or in system PATH.")
+        return None
+
+    profile_data = {"handle": handle, "profile_url": profile_url}
+
+    try:
+        print(f"Navigating to {profile_url}...")
+        driver.get(profile_url)
+
+        # --- Wait for page elements to load ---
+        print("Waiting for page to load...")
+        time.sleep(5) # Codeforces usually loads faster, adjust if needed
+
+        # --- Helper function ---
+        def safe_find_text(driver, by, value, attribute=None):
+            try:
+                element = driver.find_element(by, value)
+                if attribute:
+                    return element.get_attribute(attribute)
+                return element.text.strip()
+            except NoSuchElementException:
+                # print(f"Element not found using {by} = {value}") # Optional: for debugging
+                return "N/A"
+
+        # --- Scrape User Info Box ---
+        print("Scraping user info box...")
+        # Rank (e.g., Legendary Grandmaster) - often the first element in the main info
+        profile_data['rank'] = safe_find_text(driver, By.XPATH, "//div[@class='user-rank']/span")
+        # Handle (confirming it matches input, check for color class)
+        profile_data['displayed_handle'] = safe_find_text(driver, By.XPATH, "//div[@class='main-info']//h1/a")
+        # Rating (Current)
+        profile_data['current_rating'] = safe_find_text(driver, By.XPATH, "//div[@class='info']//li[contains(text(), 'Contest rating: ')]/span[contains(@style,'font-weight:bold')]")
+        if profile_data['current_rating'] == 'N/A': # Fallback if structure changes
+             profile_data['current_rating'] = safe_find_text(driver, By.XPATH, "//span[contains(text(),'Contest rating:')]/following-sibling::span")
+
+        # Max Rating
+        profile_data['max_rating'] = safe_find_text(driver, By.XPATH, "//div[@class='info']//li[contains(text(), 'max.')]/span[2]/span") # Often nested spans
+        if profile_data['max_rating'] == 'N/A': # Fallback
+            profile_data['max_rating'] = safe_find_text(driver, By.XPATH, "//span[contains(text(), '(max.')]/span[contains(@style,'font-weight:bold')]")
+
+
+        # Contribution
+        profile_data['contribution'] = safe_find_text(driver, By.XPATH, "//div[@class='info']//li/span[contains(text(), 'Contribution: ')]/following-sibling::span")
+        # Friend Count
+        profile_data['friend_count'] = safe_find_text(driver, By.XPATH, "//div[@class='info']//li[contains(text(), 'Friends')]/a") # Text usually like 'XXX friends'
+
+
+        # --- Scrape Additional Info (if available) ---
+        print("Scraping additional info...")
+        profile_data['organization'] = safe_find_text(driver, By.XPATH, "//div[@class='info']//li[.//a[contains(@href,'/ratings/organization')]]/a")
+        profile_data['country_city'] = safe_find_text(driver, By.XPATH, "//div[@class='info']//li[.//a[contains(@href,'/ratings/country') or contains(@href,'/ratings/city')]]/a")
+
+
+        # --- Scrape Problem Tags/Stats (Difficult to get reliably via scraping) ---
+        # The problem tags are often dynamically loaded or require complex selectors.
+        # The API is MUCH better for this. This is just a placeholder example.
+        print("Scraping problem stats (limited)...")
+        profile_data['problems_solved_count'] = safe_find_text(driver, By.XPATH, "//div[@class='_UserActivityFrame_counterValue']") # Example class, very likely to change
+        if profile_data['problems_solved_count'] == "N/A":
+             profile_data['problems_solved_count'] = safe_find_text(driver, By.XPATH, "//div[contains(text(),'Problem ratings')]//ancestor::div[contains(@class,'roundbox')]//div[contains(text(),'Total') or contains(text(),'solved')]") # Trying to find text
+
+
+        # --- (Optional) Scrape Recent Contest History ---
+        # print("Scraping recent contests...")
+        # contests = []
+        # try:
+        #     # Find the contest table rows, skip header
+        #     rows = driver.find_elements(By.XPATH, "//div[@class='datatable']//table/tbody/tr[position()>1]")
+        #     for row in rows[:5]: # Limit
+        #         cols = row.find_elements(By.TAG_NAME, "td")
+        #         if len(cols) > 3: # Basic check for valid row
+        #             contests.append({
+        #                 "contest_name": safe_find_text(cols[1], By.TAG_NAME, "a"),
+        #                 "rank": cols[3].text.strip(),
+        #                 "solved": cols[4].text.strip(),
+        #                 "rating_change": cols[5].text.strip(),
+        #             })
+        # except NoSuchElementException:
+        #     print("Contest history table not found or structure changed.")
+        # profile_data['recent_contests'] = contests
+
+        print("Scraping finished.")
+
+    except Exception as e:
+        print(f"An error occurred during Codeforces scraping: {e}")
+        # pass
+        return None # Return None on major error
+
+    finally:
+        print("Closing WebDriver.")
+        if 'driver' in locals() and driver:
+            driver.quit()
+
+    return profile_data
+
+# --- Main execution block for testing Codeforces ---
+if __name__ == "__main__":
+    # --- Replace with the Codeforces handle you want to scrape ---
+    target_cf_handle = "tourist" # Example famous user
+    # target_cf_handle = "Feferon" # Another example
+
+    print(f"\n--- Attempting to scrape Codeforces profile for: {target_cf_handle} ---")
+    cf_data = get_codeforces_profile_selenium(target_cf_handle)
+
+    if cf_data:
+        print("\n--- Codeforces Scraped Data ---")
+        print(json.dumps(cf_data, indent=4))
+        print("-----------------------------\n")
+    else:
+        print(f"Could not retrieve Codeforces profile data for {target_cf_handle}.")
+
+    print("Codeforces script finished.")

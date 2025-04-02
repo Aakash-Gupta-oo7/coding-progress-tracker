@@ -72,6 +72,59 @@ export const insertSearchHistorySchema = createInsertSchema(searchHistory).pick(
   platform: true,
 });
 
+// Contests table
+export const contests = pgTable("contests", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  platform: text("platform").notNull(), // 'leetcode', 'codeforces', 'gfg'
+  url: text("url").notNull(),
+  startTime: timestamp("start_time").notNull(),
+  durationSeconds: integer("duration_seconds").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Manual schema for contest creation with string date handling
+export const insertContestSchema = z.object({
+  name: z.string(),
+  platform: z.enum(["leetcode", "codeforces", "gfg"]),
+  url: z.string().url(),
+  startTime: z.string().transform(val => {
+    const date = new Date(val);
+    if (isNaN(date.getTime())) {
+      throw new Error("Invalid date string");
+    }
+    return date;
+  }),
+  durationSeconds: z.number().int().positive()
+});
+
+// Modified type to include Date type for internal use
+export type ContestCreateData = {
+  name: string;
+  platform: "leetcode" | "codeforces" | "gfg";
+  url: string;
+  startTime: Date;
+  durationSeconds: number;
+};
+
+// User Contest Participation table
+export const contestParticipation = pgTable("contest_participation", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  contestId: integer("contest_id").notNull(),
+  participated: boolean("participated").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertContestParticipationSchema = createInsertSchema(contestParticipation)
+  .pick({
+    contestId: true,
+    participated: true,
+  })
+  .required({
+    participated: true,
+  });
+
 // Platform Data Types
 export interface LeetcodeUserData {
   username: string;
@@ -82,6 +135,7 @@ export interface LeetcodeUserData {
   ranking: number;
   contestRating: number;
   topicData: Record<string, number>;
+  detailedData?: any; // Optional detailed data from the scraper
 }
 
 export interface CodeforcesUserData {
@@ -117,6 +171,16 @@ export interface CompareData {
   gfg?: GFGUserData;
 }
 
+export interface ContestData {
+  id: number;
+  name: string;
+  platform: 'leetcode' | 'codeforces' | 'gfg';
+  url: string;
+  startTime: string; // ISO format date string for client use
+  durationSeconds: number;
+  participated?: boolean;
+}
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type UpdateUser = z.infer<typeof updateUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -126,3 +190,14 @@ export type Question = typeof questions.$inferSelect;
 export type InsertQuestion = z.infer<typeof insertQuestionSchema>;
 export type SearchHistoryItem = typeof searchHistory.$inferSelect;
 export type InsertSearchHistoryItem = z.infer<typeof insertSearchHistorySchema>;
+export type Contest = typeof contests.$inferSelect;
+// For API requests (pre-transform)
+export type InsertContest = {
+  name: string;
+  platform: "leetcode" | "codeforces" | "gfg";
+  url: string;
+  startTime: string; // ISO format date string for API requests
+  durationSeconds: number;
+};
+export type ContestParticipation = typeof contestParticipation.$inferSelect;
+export type InsertContestParticipation = z.infer<typeof insertContestParticipationSchema>;

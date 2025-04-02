@@ -1,0 +1,219 @@
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from selenium.common.exceptions import NoSuchElementException
+import time
+import json # To pretty-print the dictionary
+
+def get_leetcode_profile_selenium(username):
+    """
+    Fetches user profile details from LeetCode using Selenium.
+
+    Args:
+        username: The LeetCode username.
+
+    Returns:
+        A dictionary containing scraped profile details, or None if the profile
+        cannot be accessed or a major scraping error occurs.
+        Returns "N/A" for fields that couldn't be found.
+    """
+    profile_url = f"https://leetcode.com/{username}/"
+
+    # --- Selenium Setup ---
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")  # Run in background
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36") # Mimic a real browser
+    chrome_options.add_argument("--window-size=1920,1080") # Helps render full page sometimes
+
+    # --- IMPORTANT: Update this path to your ChromeDriver location ---
+    try:
+        # Assumes chromedriver is in your PATH or specify the service
+        # service = Service('/path/to/your/chromedriver') # Example for specific path
+        # driver = webdriver.Chrome(service=service, options=chrome_options)
+        driver = webdriver.Chrome(options=chrome_options) # Use this if chromedriver is in PATH
+    except Exception as e:
+        print(f"Error initializing WebDriver: {e}")
+        print("Please ensure ChromeDriver is installed and its path is correct or in system PATH.")
+        return None
+
+    profile_data = {"username": username, "profile_url": profile_url}
+
+    try:
+        print(f"Navigating to {profile_url}...")
+        driver.get(profile_url)
+
+        # --- Wait for page elements to load ---
+        # Increased sleep time as LeetCode can be slow/complex to load
+        print("Waiting for page to load...")
+        time.sleep(10) # Adjust this value if needed
+
+        # --- Helper function to safely find elements ---
+        def safe_find_text(driver, by, value, attribute=None):
+            try:
+                element = driver.find_element(by, value)
+                if attribute:
+                    return element.get_attribute(attribute)
+                return element.text.strip()
+            except NoSuchElementException:
+                print(f"Element not found using {by} = {value}")
+                return "N/A"
+
+        def safe_find_elements_text(driver, by, value):
+            try:
+                elements = driver.find_elements(by, value)
+                return [el.text.strip() for el in elements if el.text.strip()]
+            except NoSuchElementException:
+                print(f"Elements not found using {by} = {value}")
+                return []
+
+        # --- Scrape Basic Info ---
+        print("Scraping basic info...")
+        # User's display name (might differ from username)
+        profile_data['display_name'] = safe_find_text(driver, By.XPATH, "//div[contains(@class, 'text-label-1') and contains(@class, 'dark:text-dark-label-1') and contains(@class, 'break-all')]")
+
+        # Rank
+        profile_data['ranking'] = safe_find_text(driver, By.XPATH, "//span[contains(@class, 'ttext-label-1')]/../following-sibling::div/span[contains(@class, 'font-medium')]") # Adjusted based on typical structure
+
+        # --- Scrape Solved Problems Stats ---
+        print("Scraping solved problems stats...")
+        try:
+            # Find the container for all three difficulties
+            solved_container = driver.find_element(By.XPATH, "//div[contains(text(), 'Solved Problems')]/following-sibling::div")
+
+            # Easy
+            easy_div = solved_container.find_element(By.XPATH, ".//div[.//div[contains(text(), 'Easy')]]")
+            profile_data['solved_easy_count'] = safe_find_text(easy_div, By.XPATH, ".//span[contains(@class, 'text-label-1')]")
+            profile_data['solved_easy_total'] = safe_find_text(easy_div, By.XPATH, ".//span[contains(text(), '/')]").split('/')[1].strip() if '/' in safe_find_text(easy_div, By.XPATH, ".//span[contains(text(), '/')]") else "N/A"
+
+            # Medium
+            medium_div = solved_container.find_element(By.XPATH, ".//div[.//div[contains(text(), 'Medium')]]")
+            profile_data['solved_medium_count'] = safe_find_text(medium_div, By.XPATH, ".//span[contains(@class, 'text-label-1')]")
+            profile_data['solved_medium_total'] = safe_find_text(medium_div, By.XPATH, ".//span[contains(text(), '/')]").split('/')[1].strip() if '/' in safe_find_text(medium_div, By.XPATH, ".//span[contains(text(), '/')]") else "N/A"
+
+             # Hard
+            hard_div = solved_container.find_element(By.XPATH, ".//div[.//div[contains(text(), 'Hard')]]")
+            profile_data['solved_hard_count'] = safe_find_text(hard_div, By.XPATH, ".//span[contains(@class, 'text-label-1')]")
+            profile_data['solved_hard_total'] = safe_find_text(hard_div, By.XPATH, ".//span[contains(text(), '/')]").split('/')[1].strip() if '/' in safe_find_text(hard_div, By.XPATH, ".//span[contains(text(), '/')]") else "N/A"
+
+            # Total Solved (Calculate or try to find)
+            try:
+                easy_c = int(profile_data['solved_easy_count'])
+                medium_c = int(profile_data['solved_medium_count'])
+                hard_c = int(profile_data['solved_hard_count'])
+                profile_data['solved_total_calculated'] = easy_c + medium_c + hard_c
+            except ValueError:
+                 profile_data['solved_total_calculated'] = "N/A (calculation failed)"
+                 # Try to find a total count element if calculation fails
+                 profile_data['solved_total_displayed'] = safe_find_text(driver, By.XPATH, "//div[contains(text(), 'Beats')]/preceding-sibling::div//span[contains(@class, 'text-label-1')]") # Example, might need adjustment
+
+
+        except NoSuchElementException:
+             print("Could not find solved problems container or its children.")
+             profile_data.update({
+                 'solved_easy_count': "N/A", 'solved_easy_total': "N/A",
+                 'solved_medium_count': "N/A", 'solved_medium_total': "N/A",
+                 'solved_hard_count': "N/A", 'solved_hard_total': "N/A",
+                 'solved_total_calculated': "N/A", 'solved_total_displayed': "N/A"
+             })
+
+
+        # --- Scrape Skills / Languages ---
+        print("Scraping skills/languages...")
+        skills = []
+        try:
+            # Find the section header for languages/skills
+            skills_header = driver.find_element(By.XPATH, "//div[text()='Languages' or text()='Skills']") # Adjust text if needed
+            # Find the container holding the skill items (often a sibling div)
+            skills_container = skills_header.find_element(By.XPATH, "./following-sibling::div")
+            # Find individual skill elements within the container
+            skill_elements = skills_container.find_elements(By.XPATH, ".//div[contains(@class, 'space-y-1.5')]") # This selector is very likely to change
+
+            for skill_el in skill_elements:
+                skill_name = safe_find_text(skill_el, By.XPATH, ".//span[contains(@class,'text-label-1')]") # Adjust selector
+                solved_count = safe_find_text(skill_el, By.XPATH, ".//span[contains(@class,'text-label-3')]") # Adjust selector
+                if skill_name != "N/A":
+                    skills.append({"skill_name": skill_name, "solved_count": solved_count})
+        except NoSuchElementException:
+            print("Could not find skills/languages section or elements.")
+        profile_data['skills_languages'] = skills
+
+        # --- Scrape Recent Submissions ---
+        print("Scraping recent submissions...")
+        submissions = []
+        try:
+            # Find the table or container for recent submissions
+            # This often requires scrolling or clicking a 'View All' button for full history
+            # This example targets the visible submissions on the main profile page
+            submission_rows = driver.find_elements(By.XPATH, "//div[contains(@class, 'reactable-data')]//tr") # Example using a common table structure class
+            # Fallback selector if the above doesn't work
+            if not submission_rows:
+                 submission_rows = driver.find_elements(By.XPATH, "//a[contains(@href, '/submissions/detail/')]/ancestor::div[contains(@class, 'odd:bg-layer-1') or contains(@class, 'even:bg-transparent')]") # More complex selector targeting links
+
+            for row in submission_rows[:5]: # Limit to first 5 visible for brevity
+                try:
+                    status = safe_find_text(row, By.XPATH, ".//span[contains(@class, 'text-green') or contains(@class, 'text-red')]") # Accepted or Error status
+                    problem_link_el = row.find_element(By.XPATH, ".//a[contains(@href, '/problems/')]")
+                    problem_name = problem_link_el.text.strip()
+                    problem_url = problem_link_el.get_attribute('href')
+                    language = safe_find_text(row, By.XPATH, ".//span[not(contains(@class, 'text-green')) and not(contains(@class, 'text-red')) and contains(@class,'')]") # Try to get the non-status span
+
+                    submissions.append({
+                        "status": status,
+                        "problem_name": problem_name,
+                        "problem_url": problem_url,
+                        "language": language
+                    })
+                except NoSuchElementException:
+                    print("Could not parse a submission row.")
+                    continue # Skip this row if essential elements are missing
+
+        except NoSuchElementException:
+            print("Could not find recent submissions container.")
+        profile_data['recent_submissions'] = submissions
+
+        # --- Scrape Community Stats ---
+        print("Scraping community stats...")
+        profile_data['views'] = safe_find_text(driver, By.XPATH, "//div[contains(text(), 'Views')]/span")
+        profile_data['solution'] = safe_find_text(driver, By.XPATH, "//div[contains(text(), 'Solution')]/span")
+        profile_data['discuss'] = safe_find_text(driver, By.XPATH, "//div[contains(text(), 'Discuss')]/span")
+        profile_data['reputation'] = safe_find_text(driver, By.XPATH, "//div[contains(text(), 'Reputation')]/span")
+
+
+        # --- Add more scraping logic here for other sections as needed ---
+        # Examples: Badges, Contest Rating History (might need chart interaction)
+
+        print("Scraping finished.")
+
+    except Exception as e:
+        print(f"An error occurred during scraping: {e}")
+        # Return partially scraped data or None depending on severity
+        # return None # Option 1: Return None on major error
+        pass # Option 2: Continue and return whatever was gathered
+
+    finally:
+        print("Closing WebDriver.")
+        driver.quit()
+
+    return profile_data
+
+# --- Main execution block for testing ---
+if __name__ == "__main__":
+    # --- Replace with the LeetCode username you want to scrape ---
+    target_username = "neetcode_io" # Example username
+    # target_username = "some_other_valid_username"
+
+    print(f"Attempting to scrape profile for: {target_username}")
+    scraped_data = get_leetcode_profile_selenium(target_username)
+
+    if scraped_data:
+        print("\n--- Scraped Data ---")
+        # Use json.dumps for pretty printing the dictionary
+        print(json.dumps(scraped_data, indent=4))
+        print("--------------------\n")
+    else:
+        print(f"Could not retrieve profile data for {target_username}.")
+
+    print("Script finished.")

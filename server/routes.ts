@@ -5,7 +5,14 @@ import { storage } from "./storage";
 import { fetchLeetcodeData } from "./platforms/leetcode";
 import { fetchCodeforcesData } from "./platforms/codeforces";
 import { fetchGFGData } from "./platforms/geeksforgeeks";
-import { insertQuestionListSchema, insertQuestionSchema, insertSearchHistorySchema } from "@shared/schema";
+import { 
+  insertQuestionListSchema,
+  insertQuestionSchema,
+  insertSearchHistorySchema,
+  insertContestSchema,
+  insertContestParticipationSchema,
+  ContestCreateData
+} from "@shared/schema";
 import { z } from "zod";
 import { exec } from "child_process";
 import { promisify } from "util";
@@ -300,6 +307,140 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Contest management endpoints
+  app.post("/api/contests", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+      
+      try {
+        // Parse and validate the incoming data
+        // The schema now transforms the string date to a Date object
+        const validatedData = insertContestSchema.parse(req.body);
+        
+        // Use the validated data directly as our ContestCreateData
+        const contestData: ContestCreateData = {
+          name: validatedData.name,
+          platform: validatedData.platform,
+          url: validatedData.url,
+          startTime: validatedData.startTime, // Already a Date object after transform
+          durationSeconds: validatedData.durationSeconds
+        };
+        
+        // Create the contest
+        const contest = await storage.createContest(contestData);
+        
+        // Return the created contest with formatted date for client use
+        res.status(201).json({
+          ...contest,
+          startTime: contest.startTime.toISOString()
+        });
+      } catch (parseError) {
+        // Handle validation errors specifically
+        if (parseError instanceof z.ZodError) {
+          return res.status(400).json({ 
+            message: parseError.errors.map(e => e.message).join(", ")
+          });
+        }
+        throw parseError; // Re-throw other errors
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  app.get("/api/contests", async (req, res, next) => {
+    try {
+      const contests = await storage.getContests();
+      
+      // Format all dates to ISO strings for client
+      const formattedContests = contests.map(contest => ({
+        ...contest,
+        startTime: contest.startTime.toISOString()
+      }));
+      
+      // If user is authenticated, include participation info
+      if (req.isAuthenticated()) {
+        const participations = await storage.getUserContestParticipations(req.user!.id);
+        
+        // Add a 'participated' flag to each contest
+        const contestsWithParticipation = formattedContests.map(contest => {
+          const participation = participations.find(p => p.contestId === contest.id);
+          return {
+            ...contest,
+            participated: participation ? participation.participated : false
+          };
+        });
+        
+        return res.json(contestsWithParticipation);
+      }
+      
+      res.json(formattedContests);
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  app.get("/api/contests/:id", async (req, res, next) => {
+    try {
+      const contestId = parseInt(req.params.id);
+      if (isNaN(contestId)) {
+        return res.status(400).json({ message: "Invalid contest ID" });
+      }
+      
+      const contest = await storage.getContest(contestId);
+      
+      if (!contest) {
+        return res.status(404).json({ message: "Contest not found" });
+      }
+      
+      // Format date to ISO string for client
+      const formattedContest = {
+        ...contest,
+        startTime: contest.startTime.toISOString()
+      };
+      
+      // If user is authenticated, include participation info
+      if (req.isAuthenticated()) {
+        const participation = await storage.getContestParticipation(req.user!.id, contestId);
+        
+        return res.json({
+          ...formattedContest,
+          participated: participation ? participation.participated : false
+        });
+      }
+      
+      res.json(formattedContest);
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  app.post("/api/contests/:id/participate", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+      
+      const contestId = parseInt(req.params.id);
+      if (isNaN(contestId)) {
+        return res.status(400).json({ message: "Invalid contest ID" });
+      }
+      
+      const contest = await storage.getContest(contestId);
+      if (!contest) {
+        return res.status(404).json({ message: "Contest not found" });
+      }
+      
+      const parsedData = insertContestParticipationSchema.parse({
+        contestId,
+        participated: req.body.participated
+      });
+      
+      const participation = await storage.setContestParticipation(req.user!.id, parsedData);
+      res.json(participation);
+    } catch (error) {
+      next(error);
+    }
+  });
+
   // Test endpoint for the Python LeetCode scraper
   app.get("/api/test/scraper/leetcode/:username", async (req, res, next) => {
     try {

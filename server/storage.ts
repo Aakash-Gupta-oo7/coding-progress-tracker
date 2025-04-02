@@ -1,7 +1,8 @@
 import { 
   User, InsertUser, QuestionList, InsertQuestionList, 
   Question, InsertQuestion, SearchHistoryItem, InsertSearchHistoryItem,
-  UpdateUser 
+  UpdateUser, Contest, InsertContest, ContestParticipation, InsertContestParticipation,
+  ContestCreateData
 } from "@shared/schema";
 
 import session from "express-session";
@@ -33,8 +34,18 @@ export interface IStorage {
   addSearchHistory(userId: number, data: InsertSearchHistoryItem): Promise<SearchHistoryItem>;
   getSearchHistory(userId: number): Promise<SearchHistoryItem[]>;
   
+  // Contests
+  createContest(contest: ContestCreateData): Promise<Contest>;
+  getContests(): Promise<Contest[]>;
+  getContest(id: number): Promise<Contest | undefined>;
+  
+  // Contest Participation
+  setContestParticipation(userId: number, data: InsertContestParticipation): Promise<ContestParticipation>;
+  getUserContestParticipations(userId: number): Promise<ContestParticipation[]>;
+  getContestParticipation(userId: number, contestId: number): Promise<ContestParticipation | undefined>;
+  
   // Session Store
-  sessionStore: session.SessionStore;
+  sessionStore: any; // Use 'any' to avoid type issues with SessionStore
 }
 
 export class MemStorage implements IStorage {
@@ -42,17 +53,23 @@ export class MemStorage implements IStorage {
   private questionLists: Map<number, QuestionList>;
   private questions: Map<number, Question>;
   private searchHistory: Map<number, SearchHistoryItem>;
-  sessionStore: session.SessionStore;
+  private contests: Map<number, Contest>;
+  private contestParticipations: Map<number, ContestParticipation>;
+  sessionStore: any; // Use 'any' to avoid type issues with SessionStore
   private userIdCounter: number;
   private listIdCounter: number;
   private questionIdCounter: number;
   private searchHistoryIdCounter: number;
+  private contestIdCounter: number;
+  private participationIdCounter: number;
 
   constructor() {
     this.users = new Map();
     this.questionLists = new Map();
     this.questions = new Map();
     this.searchHistory = new Map();
+    this.contests = new Map();
+    this.contestParticipations = new Map();
     this.sessionStore = new MemoryStore({
       checkPeriod: 86400000,
     });
@@ -60,6 +77,8 @@ export class MemStorage implements IStorage {
     this.listIdCounter = 1;
     this.questionIdCounter = 1;
     this.searchHistoryIdCounter = 1;
+    this.contestIdCounter = 1;
+    this.participationIdCounter = 1;
   }
 
   // Auth & User
@@ -230,7 +249,11 @@ export class MemStorage implements IStorage {
   async getSearchHistory(userId: number): Promise<SearchHistoryItem[]> {
     const history = Array.from(this.searchHistory.values())
       .filter(item => item.userId === userId)
-      .sort((a, b) => b.searchedAt.getTime() - a.searchedAt.getTime());
+      .sort((a, b) => {
+        const aTime = a.searchedAt ? a.searchedAt.getTime() : 0;
+        const bTime = b.searchedAt ? b.searchedAt.getTime() : 0;
+        return bTime - aTime;
+      });
     
     // Unique search history based on platform and username
     const uniqueHistory = new Map<string, SearchHistoryItem>();
@@ -243,6 +266,79 @@ export class MemStorage implements IStorage {
     }
     
     return Array.from(uniqueHistory.values());
+  }
+  
+  // Contest methods
+  async createContest(contestData: ContestCreateData): Promise<Contest> {
+    const id = this.contestIdCounter++;
+    const now = new Date();
+    
+    const contest: Contest = {
+      id,
+      name: contestData.name,
+      platform: contestData.platform,
+      url: contestData.url,
+      startTime: contestData.startTime,
+      durationSeconds: contestData.durationSeconds,
+      createdAt: now
+    };
+    
+    this.contests.set(id, contest);
+    return contest;
+  }
+  
+  async getContests(): Promise<Contest[]> {
+    return Array.from(this.contests.values()).sort((a, b) => {
+      const aTime = a.startTime ? a.startTime.getTime() : 0;
+      const bTime = b.startTime ? b.startTime.getTime() : 0;
+      return aTime - bTime;
+    });
+  }
+  
+  async getContest(id: number): Promise<Contest | undefined> {
+    return this.contests.get(id);
+  }
+  
+  // Contest participation methods
+  async setContestParticipation(userId: number, data: InsertContestParticipation): Promise<ContestParticipation> {
+    // Check if participation record already exists
+    const existing = await this.getContestParticipation(userId, data.contestId);
+    
+    if (existing) {
+      // Update existing participation
+      const updated: ContestParticipation = {
+        ...existing,
+        participated: data.participated
+      };
+      
+      this.contestParticipations.set(existing.id, updated);
+      return updated;
+    } else {
+      // Create new participation record
+      const id = this.participationIdCounter++;
+      const now = new Date();
+      
+      const participation: ContestParticipation = {
+        id,
+        userId,
+        contestId: data.contestId,
+        participated: data.participated,
+        createdAt: now
+      };
+      
+      this.contestParticipations.set(id, participation);
+      return participation;
+    }
+  }
+  
+  async getUserContestParticipations(userId: number): Promise<ContestParticipation[]> {
+    return Array.from(this.contestParticipations.values())
+      .filter(participation => participation.userId === userId);
+  }
+  
+  async getContestParticipation(userId: number, contestId: number): Promise<ContestParticipation | undefined> {
+    return Array.from(this.contestParticipations.values())
+      .find(participation => participation.userId === userId && participation.contestId === contestId);
   }
 }
 
