@@ -10,7 +10,7 @@ import DashboardPage from "@/pages/dashboard-page";
 import ProfilePage from "@/pages/profile-page";
 import ComparePage from "@/pages/compare-page";
 import ListsPage from "@/pages/lists-page";
-import CalendarPage from "@/pages/calendar-page";
+import StatsPage from "@/pages/stats-page";
 import { ProtectedRoute } from "./lib/protected-route";
 import { useEffect, useState } from "react";
 
@@ -20,10 +20,10 @@ function Router() {
       <Route path="/" component={HomePage} />
       <Route path="/auth" component={AuthPage} />
       <Route path="/compare" component={ComparePage} />
-      <Route path="/calendar" component={CalendarPage} />
       <ProtectedRoute path="/dashboard" component={DashboardPage} />
       <ProtectedRoute path="/profile" component={ProfilePage} />
       <ProtectedRoute path="/lists" component={ListsPage} />
+      <ProtectedRoute path="/stats" component={StatsPage} />
       {/* Fallback to 404 */}
       <Route component={NotFound} />
     </Switch>

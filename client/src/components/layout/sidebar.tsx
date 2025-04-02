@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { 
   LayoutDashboard, 
   BarChartHorizontal, 
+  LineChart, 
   List, 
   User, 
   Code, 
@@ -13,7 +14,7 @@ import {
   Terminal, 
   Menu, 
   X,
-  Calendar
+  PieChart
 } from "lucide-react";
 
 interface SidebarProps {
@@ -46,9 +47,9 @@ export default function Sidebar({ className }: SidebarProps) {
       icon: <List className="mr-3 text-lg" /> 
     },
     { 
-      href: "/calendar", 
-      label: "Contest Calendar", 
-      icon: <Calendar className="mr-3 text-lg" /> 
+      href: "/stats", 
+      label: "Visualizations", 
+      icon: <PieChart className="mr-3 text-lg" /> 
     },
     { 
       href: "/profile", 
