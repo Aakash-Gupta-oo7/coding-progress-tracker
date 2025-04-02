@@ -3,6 +3,8 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useParams, Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useLeetCodeQuestions } from "@/hooks/use-leetcode-questions";
+import { useCodeForcesQuestions } from "@/hooks/use-codeforces-questions";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -46,12 +48,15 @@ import {
   Calendar,
   Users,
   User,
+  Search,
 } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
 
 // Form schema for adding a question
 const questionSchema = z.object({
@@ -238,108 +243,144 @@ const SharedListPage = () => {
               Add Question
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-w-4xl">
             <DialogHeader>
               <DialogTitle>Add Question to Shared List</DialogTitle>
             </DialogHeader>
-            <Form {...questionForm}>
-              <form onSubmit={questionForm.handleSubmit(onAddQuestionSubmit)}>
-                <FormField
-                  control={questionForm.control}
-                  name="title"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Question Title</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Enter question title..." {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={questionForm.control}
-                  name="url"
-                  render={({ field }) => (
-                    <FormItem className="mt-4">
-                      <FormLabel>URL</FormLabel>
-                      <FormControl>
-                        <Input placeholder="https://..." {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <div className="grid grid-cols-3 gap-4 mt-4">
-                  <FormField
-                    control={questionForm.control}
-                    name="platform"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Platform</FormLabel>
-                        <FormControl>
-                          <select
-                            className="w-full px-3 py-2 border rounded-md"
-                            {...field}
-                          >
-                            <option value="leetcode">LeetCode</option>
-                            <option value="codeforces">CodeForces</option>
-                            <option value="gfg">GeeksforGeeks</option>
-                            <option value="other">Other</option>
-                          </select>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={questionForm.control}
-                    name="difficulty"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Difficulty</FormLabel>
-                        <FormControl>
-                          <select
-                            className="w-full px-3 py-2 border rounded-md"
-                            {...field}
-                          >
-                            <option value="">Select...</option>
-                            <option value="easy">Easy</option>
-                            <option value="medium">Medium</option>
-                            <option value="hard">Hard</option>
-                          </select>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={questionForm.control}
-                    name="topic"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Topic</FormLabel>
-                        <FormControl>
-                          <Input placeholder="e.g., DP" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                <DialogFooter className="mt-6">
-                  <Button
-                    type="submit"
-                    disabled={addQuestionMutation.isPending}
-                  >
-                    {addQuestionMutation.isPending && (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    )}
-                    Add Question
-                  </Button>
-                </DialogFooter>
-              </form>
-            </Form>
+            <Tabs defaultValue="manual">
+              <TabsList className="mb-4">
+                <TabsTrigger value="manual">Manual Entry</TabsTrigger>
+                <TabsTrigger value="leetcode">LeetCode</TabsTrigger>
+                <TabsTrigger value="codeforces">CodeForces</TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="manual">
+                <Form {...questionForm}>
+                  <form onSubmit={questionForm.handleSubmit(onAddQuestionSubmit)}>
+                    <FormField
+                      control={questionForm.control}
+                      name="title"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Question Title</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Enter question title..." {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={questionForm.control}
+                      name="url"
+                      render={({ field }) => (
+                        <FormItem className="mt-4">
+                          <FormLabel>URL</FormLabel>
+                          <FormControl>
+                            <Input placeholder="https://..." {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <div className="grid grid-cols-3 gap-4 mt-4">
+                      <FormField
+                        control={questionForm.control}
+                        name="platform"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Platform</FormLabel>
+                            <FormControl>
+                              <select
+                                className="w-full px-3 py-2 border rounded-md"
+                                {...field}
+                              >
+                                <option value="leetcode">LeetCode</option>
+                                <option value="codeforces">CodeForces</option>
+                                <option value="gfg">GeeksforGeeks</option>
+                                <option value="other">Other</option>
+                              </select>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={questionForm.control}
+                        name="difficulty"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Difficulty</FormLabel>
+                            <FormControl>
+                              <select
+                                className="w-full px-3 py-2 border rounded-md"
+                                {...field}
+                              >
+                                <option value="">Select...</option>
+                                <option value="easy">Easy</option>
+                                <option value="medium">Medium</option>
+                                <option value="hard">Hard</option>
+                              </select>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={questionForm.control}
+                        name="topic"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Topic</FormLabel>
+                            <FormControl>
+                              <Input placeholder="e.g., DP" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                    <DialogFooter className="mt-6">
+                      <Button
+                        type="submit"
+                        disabled={addQuestionMutation.isPending}
+                      >
+                        {addQuestionMutation.isPending && (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        )}
+                        Add Question
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </Form>
+              </TabsContent>
+              
+              <TabsContent value="leetcode">
+                <LeetCodeQuestionSearch onAddQuestion={(question) => {
+                  // Auto-fill the form with LeetCode question data
+                  questionForm.setValue("title", question.title);
+                  questionForm.setValue("url", question.link);
+                  questionForm.setValue("platform", "leetcode");
+                  questionForm.setValue("difficulty", question.difficulty.toLowerCase());
+                  
+                  // Submit the form automatically
+                  questionForm.handleSubmit(onAddQuestionSubmit)();
+                }} />
+              </TabsContent>
+              
+              <TabsContent value="codeforces">
+                <CodeForcesQuestionSearch onAddQuestion={(question) => {
+                  // Auto-fill the form with CodeForces question data
+                  questionForm.setValue("title", question.title);
+                  questionForm.setValue("url", question.url);
+                  questionForm.setValue("platform", "codeforces");
+                  questionForm.setValue("difficulty", question.difficulty || "");
+                  
+                  // Submit the form automatically
+                  questionForm.handleSubmit(onAddQuestionSubmit)();
+                }} />
+              </TabsContent>
+            </Tabs>
           </DialogContent>
         </Dialog>
       </div>
@@ -533,6 +574,171 @@ const QuestionsTable = ({
           })}
         </TableBody>
       </Table>
+    </div>
+  );
+};
+
+// LeetCode Question Search Component
+const LeetCodeQuestionSearch = ({ 
+  onAddQuestion 
+}: { 
+  onAddQuestion: (question: any) => void 
+}) => {
+  const { 
+    questions, 
+    searchQuery, 
+    setSearchQuery, 
+    isLoading 
+  } = useLeetCodeQuestions();
+
+  return (
+    <div className="space-y-4">
+      <div className="relative">
+        <Input
+          type="text"
+          placeholder="Search LeetCode questions..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pr-10"
+        />
+        <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+      </div>
+      
+      {isLoading ? (
+        <div className="space-y-2">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="flex items-center space-x-2">
+              <Skeleton className="h-12 w-full rounded-md" />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <ScrollArea className="h-[300px]">
+          <div className="space-y-2">
+            {questions.length > 0 ? (
+              questions.map((question) => (
+                <div 
+                  key={question.questionNumber}
+                  className="flex items-center justify-between p-3 border rounded-md hover:bg-accent cursor-pointer"
+                  onClick={() => onAddQuestion(question)}
+                >
+                  <div>
+                    <div className="font-medium">{question.title}</div>
+                    <div className="flex items-center space-x-2 mt-1">
+                      <Badge variant="outline" className={`
+                        ${question.difficulty === 'Easy' 
+                          ? 'bg-green-100 text-green-800' 
+                          : question.difficulty === 'Medium' 
+                            ? 'bg-yellow-100 text-yellow-800' 
+                            : 'bg-red-100 text-red-800'
+                        }`}
+                      >
+                        {question.difficulty}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">#{question.questionNumber}</span>
+                      {question.premium && (
+                        <Badge variant="outline" className="bg-purple-100 text-purple-800">Premium</Badge>
+                      )}
+                    </div>
+                  </div>
+                  <Button size="sm" variant="ghost">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add
+                  </Button>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                {searchQuery 
+                  ? "No questions found matching your search" 
+                  : "Start typing to search for LeetCode questions"}
+              </div>
+            )}
+          </div>
+        </ScrollArea>
+      )}
+    </div>
+  );
+};
+
+// CodeForces Question Search Component
+const CodeForcesQuestionSearch = ({ 
+  onAddQuestion 
+}: { 
+  onAddQuestion: (question: any) => void 
+}) => {
+  const { 
+    questions, 
+    searchQuery, 
+    setSearchQuery, 
+    isLoading 
+  } = useCodeForcesQuestions();
+
+  return (
+    <div className="space-y-4">
+      <div className="relative">
+        <Input
+          type="text"
+          placeholder="Search CodeForces problems..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pr-10"
+        />
+        <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+      </div>
+      
+      {isLoading ? (
+        <div className="space-y-2">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="flex items-center space-x-2">
+              <Skeleton className="h-12 w-full rounded-md" />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <ScrollArea className="h-[300px]">
+          <div className="space-y-2">
+            {questions.length > 0 ? (
+              questions.map((question) => (
+                <div 
+                  key={question.problemId}
+                  className="flex items-center justify-between p-3 border rounded-md hover:bg-accent cursor-pointer"
+                  onClick={() => onAddQuestion(question)}
+                >
+                  <div>
+                    <div className="font-medium">{question.title}</div>
+                    <div className="flex items-center space-x-2 mt-1">
+                      {question.difficulty && (
+                        <Badge variant="outline" className={`
+                          ${question.difficulty === 'easy' 
+                            ? 'bg-green-100 text-green-800' 
+                            : question.difficulty === 'medium' 
+                              ? 'bg-yellow-100 text-yellow-800' 
+                              : 'bg-red-100 text-red-800'
+                          }`}
+                        >
+                          {question.difficulty}
+                        </Badge>
+                      )}
+                      <span className="text-xs text-muted-foreground">Problem {question.problemId}</span>
+                    </div>
+                  </div>
+                  <Button size="sm" variant="ghost">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add
+                  </Button>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                {searchQuery 
+                  ? "No problems found matching your search" 
+                  : "Start typing to search for CodeForces problems"}
+              </div>
+            )}
+          </div>
+        </ScrollArea>
+      )}
     </div>
   );
 };

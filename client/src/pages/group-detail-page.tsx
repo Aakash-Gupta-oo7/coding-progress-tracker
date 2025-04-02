@@ -240,8 +240,12 @@ const GroupDetailPage = () => {
   }
 
   function onCreateTestSubmit(data: PrivateTestFormValues) {
-    // Convert string to ISO date string
-    createTestMutation.mutate(data);
+    // Ensure the startTime is in ISO format for the server
+    const formattedData = {
+      ...data,
+      startTime: new Date(data.startTime).toISOString()
+    };
+    createTestMutation.mutate(formattedData);
   }
 
   // Copy invite code to clipboard
