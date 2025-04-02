@@ -16,6 +16,9 @@ import {
 import { z } from "zod";
 import { exec } from "child_process";
 import { promisify } from "util";
+import path from "path";
+
+const execPromise = promisify(exec);
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Sets up auth routes: /api/register, /api/login, /api/logout, /api/user
@@ -140,6 +143,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const history = await storage.getSearchHistory(req.user!.id);
       res.json(history);
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  // Delete a search history item
+  app.delete("/api/profile/search-history/:id", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+      
+      const searchHistoryId = parseInt(req.params.id);
+      if (isNaN(searchHistoryId)) {
+        return res.status(400).json({ message: "Invalid search history ID" });
+      }
+      
+      await storage.deleteSearchHistoryItem(req.user!.id, searchHistoryId);
+      res.status(200).json({ message: "Search history item deleted successfully" });
     } catch (error) {
       next(error);
     }
@@ -464,6 +484,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
           success: false,
           error: (error as Error).message,
           details: "The Python scraper failed. This is expected in the Replit environment, but the fallback mechanism should work."
+        });
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  // Endpoint to fetch upcoming contests from all platforms
+  app.get("/api/contests/upcoming", async (req, res, next) => {
+    try {
+      const pythonPath = path.join(process.cwd(), 'server', 'platforms', 'contest_fetcher.py');
+      try {
+        // Run the Python script to fetch contest data
+        const { stdout, stderr } = await execPromise(`python ${pythonPath}`);
+        
+        if (stderr && stderr.length > 0) {
+          console.error("Error running contest fetcher script:", stderr);
+        }
+        
+        // Parse the results from stdout
+        const contestsData = JSON.parse(stdout);
+        
+        // Store relevant contests in the database for tracking participation
+        for (const contest of contestsData) {
+          try {
+            // Check if contest already exists by matching platform and name
+            const existingContests = await storage.getContests();
+            const exists = existingContests.some(c => 
+              c.platform.toLowerCase() === contest.platform.toLowerCase() && 
+              c.name === contest.name
+            );
+            
+            if (!exists) {
+              // Create a new contest record
+              const startTime = new Date(contest.start_time_iso);
+              
+              // Only add if it's a valid date
+              if (isNaN(startTime.getTime())) continue;
+              
+              const contestData: ContestCreateData = {
+                name: contest.name,
+                platform: contest.platform.toLowerCase() === 'leetcode' ? 'leetcode' :
+                          contest.platform.toLowerCase() === 'codeforces' ? 'codeforces' : 'gfg',
+                url: contest.url,
+                startTime: startTime,
+                durationSeconds: contest.duration_seconds || 7200 // Default to 2 hours if not specified
+              };
+              
+              await storage.createContest(contestData);
+            }
+          } catch (err) {
+            console.error("Error processing contest:", err);
+            // Continue with next contest
+          }
+        }
+        
+        res.json({
+          success: true,
+          message: "Contests fetched and saved successfully",
+          count: contestsData.length
+        });
+      } catch (error) {
+        console.error("Error running Python script:", error);
+        
+        // Fallback to database contests
+        const contests = await storage.getContests();
+        const formattedContests = contests.map(contest => ({
+          ...contest,
+          startTime: contest.startTime.toISOString()
+        }));
+        
+        res.json({
+          success: false,
+          message: "Failed to fetch fresh contests. Using existing data.",
+          contests: formattedContests
         });
       }
     } catch (error) {

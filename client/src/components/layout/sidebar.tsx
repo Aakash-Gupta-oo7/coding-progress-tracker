@@ -12,7 +12,8 @@ import {
   FileCode, 
   Terminal, 
   Menu, 
-  X 
+  X,
+  Calendar
 } from "lucide-react";
 
 interface SidebarProps {
@@ -43,6 +44,11 @@ export default function Sidebar({ className }: SidebarProps) {
       href: "/lists", 
       label: "Question Lists", 
       icon: <List className="mr-3 text-lg" /> 
+    },
+    { 
+      href: "/calendar", 
+      label: "Contest Calendar", 
+      icon: <Calendar className="mr-3 text-lg" /> 
     },
     { 
       href: "/profile", 

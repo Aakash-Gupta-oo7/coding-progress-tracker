@@ -33,6 +33,7 @@ export interface IStorage {
   // Search History
   addSearchHistory(userId: number, data: InsertSearchHistoryItem): Promise<SearchHistoryItem>;
   getSearchHistory(userId: number): Promise<SearchHistoryItem[]>;
+  deleteSearchHistoryItem(userId: number, searchHistoryId: number): Promise<void>;
   
   // Contests
   createContest(contest: ContestCreateData): Promise<Contest>;
@@ -266,6 +267,17 @@ export class MemStorage implements IStorage {
     }
     
     return Array.from(uniqueHistory.values());
+  }
+  
+  async deleteSearchHistoryItem(userId: number, searchHistoryId: number): Promise<void> {
+    const item = this.searchHistory.get(searchHistoryId);
+    
+    // Only allow deletion if the item exists and belongs to the user
+    if (item && item.userId === userId) {
+      this.searchHistory.delete(searchHistoryId);
+    } else {
+      throw new Error("Search history item not found or not authorized to delete");
+    }
   }
   
   // Contest methods
