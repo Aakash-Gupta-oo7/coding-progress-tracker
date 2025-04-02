@@ -17,16 +17,29 @@ export async function runLeetCodeScraper(username: string): Promise<{
   console.log(`Running LeetCode scraper for user: ${username}`);
   
   // Execute the Python script and capture its output
-  const { stdout, stderr } = await execAsync(`python3 server/platforms/leetcode_scraper.py ${username}`);
+  const { stdout, stderr } = await execAsync(`python3 server/platforms/leetcode_api.py "${username}"`);
   
   let debugInfo = undefined;
   if (stderr) {
-    console.log("Scraper debug info:", stderr);
+    console.log("API debug info:", stderr);
     debugInfo = stderr;
   }
   
   if (!stdout.trim()) {
-    throw new Error("No data returned from the LeetCode scraper");
+    throw new Error("No data returned from the LeetCode API");
+  }
+  
+  // Check if the response contains an error
+  try {
+    const parsedOutput = JSON.parse(stdout);
+    if (parsedOutput.error) {
+      throw new Error(`LeetCode API error: ${parsedOutput.error}`);
+    }
+  } catch (e) {
+    // If it's not a JSON parse error, rethrow
+    if (!(e instanceof SyntaxError)) {
+      throw e;
+    }
   }
   
   // Parse the JSON output from the Python script

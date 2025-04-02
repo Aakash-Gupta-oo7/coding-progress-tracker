@@ -1,0 +1,319 @@
+LeetCode API (GraphQL):
+############################################################################################################
+                    # This file can retreve used getails from leetcode using user_id
+############################################################################################################
+
+import requests
+
+def get_leetcode_profile(username):
+    # GraphQL endpoint for LeetCode
+    url = "https://leetcode.com/graphql"
+    
+    # GraphQL query to fetch detailed user profile data
+    query = """
+    query getUserProfile($username: String!) {
+        matchedUser(username: $username) {
+            username
+            submitStatsGlobal {
+                acSubmissionNum {
+                    difficulty
+                    count
+                }
+            }
+            profile {
+                ranking
+                realName
+                aboutMe
+            }
+            tagProblemCounts {
+                advanced {
+                    tagName
+                    problemsSolved
+                }
+                intermediate {
+                    tagName
+                    problemsSolved
+                }
+                fundamental {
+                    tagName
+                    problemsSolved
+                }
+            }
+            languageProblemCount {
+                languageName
+                problemsSolved
+            }
+            userCalendar {
+                streak
+                totalActiveDays
+            }
+        }
+    }
+    """
+    # Variables for the GraphQL query
+    variables = {"username": username}
+    
+    # Send POST request to the GraphQL endpoint
+    response = requests.post(url, json={"query": query, "variables": variables})
+    
+    # Check if the request was successful
+    if response.status_code == 200:
+        return response.json()
+    else:
+        print(f"Error: {response.status_code}")
+        print(f"Response: {response.text}")  # Print the full error message
+        return None
+
+# Main function to process and display the data
+def main():
+    # Replace with a valid LeetCode username
+    username = "Aakash_Gupta"  # ################################################################################################
+    
+    # Fetch the profile data
+    profile_data = get_leetcode_profile(username)
+    
+    # Process and display the data if the request was successful
+    if profile_data and "data" in profile_data:
+        matched_user = profile_data["data"]["matchedUser"]
+        
+        # Extract general profile information
+        username = matched_user["username"]
+        ranking = matched_user["profile"]["ranking"]
+        real_name = matched_user["profile"]["realName"]
+        about_me = matched_user["profile"]["aboutMe"]
+        
+        # Extract submission stats
+        submission_stats = matched_user["submitStatsGlobal"]["acSubmissionNum"]
+        total_solved = sum(stat["count"] for stat in submission_stats)
+        
+        # Extract languages
+        languages = matched_user.get("languageProblemCount", [])
+        
+        # Extract tags/topics
+        tags = {
+            "advanced": matched_user.get("tagProblemCounts", {}).get("advanced", []),
+            "intermediate": matched_user.get("tagProblemCounts", {}).get("intermediate", []),
+            "fundamental": matched_user.get("tagProblemCounts", {}).get("fundamental", []),
+        }
+        
+        # Extract calendar data
+        calendar = matched_user.get("userCalendar", {})
+        streak = calendar.get("streak", 0)
+        active_days = calendar.get("totalActiveDays", 0)
+        
+        # Print results
+        print(f"Username: {username}")
+        print(f"Ranking: {ranking}")
+        print(f"Real Name: {real_name}")
+        print(f"About Me: {about_me}")
+        print(f"Total Solved: {total_solved}")
+        print("\nLanguages:")
+        for lang in languages:
+            print(f"- {lang['languageName']}: {lang['problemsSolved']} problems")
+        
+        print("\nTopics (Tags):")
+        for level, tag_list in tags.items():
+            print(f"{level.capitalize()}:")
+            for tag in tag_list:
+                print(f"- {tag['tagName']}: {tag['problemsSolved']} problems")
+        
+        print("\nStreak and Active Days:")
+        print(f"- Streak: {streak} days")
+        print(f"- Total Active Days: {active_days} days")
+    else:
+        print("Failed to retrieve profile data.")
+
+# Run the main function
+if __name__ == "__main__":
+    main()
+
+
+CodeForces API:
+
+import requests
+from collections import defaultdict
+
+
+def get_codeforces_profile(handle):
+    # Base URL for Codeforces API
+    base_url = "https://codeforces.com/api/"
+    
+    # Fetch user info (rating, rank, etc.)
+    user_info_url = f"{base_url}user.info?handles={handle}"
+    response = requests.get(user_info_url)
+    
+    if response.status_code != 200 or response.json()["status"] != "OK":
+        print("Error fetching user info.")
+        return None
+    
+    user_info = response.json()["result"][0]
+    
+    # Fetch user submissions (to calculate solved problems and tags)
+    submissions_url = f"{base_url}user.status?handle={handle}"
+    response = requests.get(submissions_url)
+    
+    if response.status_code != 200 or response.json()["status"] != "OK":
+        print("Error fetching user submissions.")
+        return None
+    
+    submissions = response.json()["result"]
+    
+    return user_info, submissions
+
+
+def process_codeforces_data(user_info, submissions):
+    # Extract general profile information
+    handle = user_info.get("handle", "N/A")
+    rating = user_info.get("rating", "N/A")
+    rank = user_info.get("rank", "N/A")
+    organization = user_info.get("organization", "N/A")
+    
+    # Process submissions to extract solved problems and tags
+    solved_problems = set()
+    tag_counts = defaultdict(int)
+    problem_categories = defaultdict(int)
+    
+    for submission in submissions:
+        if submission["verdict"] == "OK":  # Only consider accepted solutions
+            problem = submission["problem"]
+            problem_id = problem["name"]
+            solved_problems.add(problem_id)
+            
+            # Count tags for the solved problem
+            for tag in problem.get("tags", []):
+                tag_counts[tag] += 1
+            
+            # Count problems by category (e.g., difficulty level)
+            problem_index = problem.get("index", "")
+            if problem_index:
+                category = problem_index[0]  # First letter indicates difficulty (A, B, C, etc.)
+                problem_categories[category] += 1
+    
+    # Print results
+    print(f"Handle: {handle}")
+    print(f"Current Rating: {rating}")
+    print(f"Rank: {rank}")
+    print(f"Organization/College: {organization}")
+    print(f"Total Problems Solved: {len(solved_problems)}")
+    
+    print("\nTags of Solved Problems:")
+    for tag, count in tag_counts.items():
+        print(f"- {tag}: {count} problems")
+    
+    print("\nProblems Solved by Category:")
+    for category, count in sorted(problem_categories.items()):
+        print(f"- {category}: {count} problems")
+
+
+# Main function to fetch and display Codeforces profile data
+def main():
+    # Replace with a valid Codeforces handle
+    handle = "tourist"  # Example: A well-known Codeforces user
+    
+    # Fetch profile and submission data
+    result = get_codeforces_profile(handle)
+    
+    if result:
+        user_info, submissions = result
+        process_codeforces_data(user_info, submissions)
+    else:
+        print("Failed to retrieve Codeforces profile data.")
+
+
+# Run the main function
+if __name__ == "__main__":
+    main()
+
+GeeksForGeeks 
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+import time
+
+def get_gfg_profile(username):
+    # Set up Selenium WebDriver
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")  # Run browser in headless mode
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--no-sandbox")
+    
+    # Path to your ChromeDriver executable
+    service = Service("C:/chromedriver/chromedriver.exe")  # Update this path
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+    
+    # URL for the GFG user profile
+    url = f"https://auth.geeksforgeeks.org/user/{username}/practice/"
+    driver.get(url)
+    
+    # Wait for the page to load
+    time.sleep(5)
+    
+    try:
+        # Extract general profile information
+        name = driver.find_element(By.TAG_NAME, "h1").text.strip()
+        institute = driver.find_element(By.XPATH, "//div[contains(text(), 'Institution')]").text.strip()
+        coding_score = driver.find_element(By.XPATH, "//span[contains(text(), 'Coding Score')]").text.strip()
+        
+        # Extract problem-solving details
+        solved_problems = []
+        tag_counts = {}
+        difficulty_counts = {}
+        
+        # Find all solved problems
+        problem_rows = driver.find_elements(By.CLASS_NAME, "problem-row")  # Hypothetical class name
+        for row in problem_rows:
+            try:
+                problem_name = row.find_element(By.TAG_NAME, "a").text.strip()
+                tags = [tag.text.strip() for tag in row.find_elements(By.CLASS_NAME, "tag")]
+                difficulty = row.find_element(By.CLASS_NAME, "difficulty-level").text.strip()
+                
+                solved_problems.append(problem_name)
+                for tag in tags:
+                    tag_counts[tag] = tag_counts.get(tag, 0) + 1
+                difficulty_counts[difficulty] = difficulty_counts.get(difficulty, 0) + 1
+            except Exception as e:
+                print(f"Error parsing a problem row: {e}")
+                continue
+        
+        driver.quit()
+        return {
+            "name": name,
+            "institute": institute,
+            "coding_score": coding_score,
+            "solved_problems": solved_problems,
+            "tag_counts": tag_counts,
+            "difficulty_counts": difficulty_counts
+        }
+    except Exception as e:
+        print(f"Error: Unable to parse profile details. {e}")
+        driver.quit()
+        return None
+
+
+# Main function to fetch and display GFG profile data
+def main():
+    # Replace with a valid GFG username
+    username = "bijos92qgt"  # Example: Replace with a real GFG username
+    
+    # Fetch profile data
+    profile_data = get_gfg_profile(username)
+    
+    if profile_data:
+        print(f"Name: {profile_data['name']}")
+        print(f"Institute: {profile_data['institute']}")
+        print(f"Coding Score: {profile_data['coding_score']}")
+        print(f"Total Problems Solved: {len(profile_data['solved_problems'])}")
+        print("\nTags of Solved Problems:")
+        for tag, count in profile_data["tag_counts"].items():
+            print(f"- {tag}: {count} problems")
+        print("\nProblems Solved by Difficulty:")
+        for difficulty, count in profile_data["difficulty_counts"].items():
+            print(f"- {difficulty}: {count} problems")
+    else:
+        print("Failed to retrieve GFG profile data.")
+
+
+# Run the main function
+if __name__ == "__main__":
+    main()
