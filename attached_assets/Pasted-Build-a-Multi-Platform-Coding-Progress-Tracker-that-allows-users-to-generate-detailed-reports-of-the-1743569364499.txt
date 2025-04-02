@@ -1,0 +1,228 @@
+Build a Multi-Platform Coding Progress Tracker that allows users to generate detailed reports of their coding activity across LeetCode, CodeForces, and GeeksForGeeks platforms using their user IDs. The app should allow users to compare their progress with others, maintain customizable lists of coding problems, and manage their user profile.
+
+Tech Stack
+
+Frontend: React with TypeScript + TailwindCSS
+
+Backend: Django + DRF
+
+Database: PostgreSQL
+
+Authentication: JWT-based authentication
+
+Functional Requirements
+
+Authentication
+
+Implement JWT-based authentication for signup and login.
+
+Use djangorestframework-simplejwt for backend JWT token management.
+
+Store user information in the database, including username and account creation date.
+
+User Profile Page & Platform Linking
+
+Profile Page: Implement a dedicated profile page accessible to logged-in users. This page should display:
+
+The user's username.
+
+The user's account creation date.
+
+A section displaying the user's linked profiles/usernames for GFG, LeetCode, and Codeforces (as entered in the linking section below).
+
+Platform Profile Linking Section:
+
+Provide a section (e.g., on the Profile Page or an "Edit Profile" page) for users to input and save their user IDs for specific platforms.
+
+Required Platforms: This section must only include input fields for:
+
+GeeksforGeeks (GFG)
+
+LeetCode
+
+Codeforces
+
+Styling and Layout:
+
+This section's appearance should closely mimic the layout shown in the provided image, but only for the three specified platforms.
+
+Use a clear title (e.g., "Problem Solving Profiles").
+
+List each platform vertically with its name and logo (if feasible, like the image).
+
+Place an input field next to each platform name.
+
+Structure the input fields or use placeholder text to show the base URL, guiding the user to enter only their username:
+
+LeetCode: https://leetcode.com/u/ [username input]
+
+GeeksforGeeks: https://www.geeksforgeeks.org/user/ [username input]
+
+Codeforces: https://codeforces.com/profile/ [username input]
+
+Ensure clean visual design (input box style, alignment, spacing) inspired by the image.
+
+Do not include fields for CodeStudio, InterviewBit, Codechef, HackerRank, AtCoder.
+
+Search History:
+
+Include an option on the profile page (e.g., "View Search History" button/link).
+
+Clicking this should open a popup screen (modal).
+
+The popup must display a list of all unique user profiles (usernames/IDs) that the currently logged-in user has searched for using the comparison feature. (Requires backend logic to store this history).
+
+Platform Data Fetching
+
+Fetch user data from LeetCode, CodeForces, and GeeksForGeeks using their respective APIs/methods:
+
+LeetCode: Use GraphQL API (code provided below).
+
+CodeForces: Use the official CodeForces API (code provided below).
+
+GeeksForGeeks: Use Selenium Web Scraping (code provided below).
+
+The application should use the user's saved profile IDs (from the Platform Profile Linking section) to fetch their own data for display on their dashboard/profile.
+
+Users should still be able to manually enter solved questions (though this might be secondary to fetched data).
+
+User Comparison Feature
+
+Allow users to input one or more usernames/IDs (for LeetCode, GFG, Codeforces) to compare profiles. Note: This feature uses ad-hoc inputs for comparison, distinct from the logged-in user's saved profiles.
+
+Compare progress in: Total problems solved, Topics solved, Difficulty-wise questions.
+
+Display comparison using bar graphs, pie charts, and tables.
+
+No ranking system.
+
+This feature should be accessible to all users without login.
+
+Backend Requirement: When a logged-in user performs a comparison, the usernames/IDs they searched for should be recorded in their search history (ensuring uniqueness).
+
+Custom Question Lists
+
+Allow logged-in users to create multiple question lists with custom names.
+
+Add questions to lists by providing URLs from supported platforms (LeetCode, GFG, Codeforces).
+
+Categorize lists by Difficulty or Topics.
+
+Allow marking questions as solved within a list (no personal notes needed).
+
+Lists should have private or public visibility options, controllable by the user.
+
+API Endpoints
+
+Backend API should have the following endpoints (adjustments/additions marked):
+
+/api/auth/register/ – User Registration
+
+/api/auth/login/ – User Login
+
+/api/profile/ – (NEW/GET) Fetch logged-in user's profile data (username, creation date, linked IDs).
+
+/api/profile/update-links/ – (NEW/PUT or POST) Update/Save logged-in user's platform usernames (LeetCode, GFG, Codeforces).
+
+/api/profile/search-history/ – (NEW/GET) Fetch logged-in user's unique search history.
+
+/api/fetch/leetcode/ – Fetch LeetCode Data (takes username as parameter)
+
+/api/fetch/codeforces/ – Fetch CodeForces Data (takes handle as parameter)
+
+/api/fetch/gfg/ – Fetch GFG Data (takes username as parameter)
+
+/api/questions/create_list/ – Create Question List
+
+/api/questions/add_question/ – Add Question to List
+
+/api/questions/list/<list_id>/ – (SUGGESTED/GET, PUT, DELETE) Manage specific list (view, update visibility, delete)
+
+/api/questions/list/<list_id>/mark_solved/ – (SUGGESTED/POST) Mark question solved in list
+
+/api/compare/ – Compare User Profiles (takes multiple usernames/platforms as parameters). Should also log search for logged-in users.
+
+Frontend Features
+
+Dark Mode
+
+Dashboard: Overview of the logged-in user's fetched progress using their saved IDs.
+
+Profile Page: Displays user info, linked profiles, and provides access to the linking section and search history modal.
+
+Platform Linking Section: Input form styled as requested.
+
+Search History Modal: Popup displaying searched profiles.
+
+Custom List Management: Create, view, modify lists and mark questions.
+
+Comparison Page: Input fields for comparison and visual data representation (Chart.js or Recharts).
+
+Additional Requirements
+
+No Progress Tracking Over Time (focus on current snapshot).
+
+No Email Notifications.
+
+No Automated Recommendations.
+
+Provided Fetching Code
+
+(Keep the LeetCode GraphQL, CodeForces API, and GeeksForGeeks Selenium code sections exactly as they were in the original prompt here)
+
+--- NEW REQUIREMENT ---
+
+6. Codebase Documentation for LLMs
+
+In addition to the code, generate a separate Markdown file (e.g., CODEBASE_EXPLANATION.md) placed at the root of the project directory.
+
+Purpose: This file should explain the generated codebase in a way that helps another Large Language Model (LLM) quickly understand its structure and functionality without needing to parse every file.
+
+Content: The document should include:
+
+Overview: A brief description of the application's purpose and features.
+
+Technology Stack: List the main frameworks and libraries used.
+
+Project Structure: A high-level overview of the main directories in both the frontend and backend (e.g., frontend/src/components, backend/api/views, backend/models). Explain the purpose of key directories.
+
+Data Flow: Describe how data moves through the system for major features:
+
+User Authentication (Login/Register)
+
+Fetching Platform Data (e.g., User enters username -> Frontend calls API -> Backend fetches from external API -> Backend returns data -> Frontend displays).
+
+User Comparison
+
+Custom List Management
+
+Profile Updates & Search History
+
+Key Components/Functions: Briefly mention crucial functions or components and their roles (e.g., "The fetchLeetcodeData function in backend/api/views.py handles interaction with the LeetCode GraphQL API using the provided script."). Explain where they get their necessary data from (e.g., API parameters, database queries, user input from frontend).
+
+Database Models: Briefly list the main database models and their relationships (e.g., User, QuestionList, SearchHistory).
+
+API Endpoints: Briefly reiterate the main API endpoints and their purpose.
+
+Setup/Running Instructions (Optional but helpful): Basic steps to set up and run the project locally.
+
+--- END NEW REQUIREMENT ---
+
+Development Steps
+
+Set up the Django + DRF backend environment... (steps 1-7 remain the same as before)
+
+Set up the React with TypeScript frontend environment...
+
+Implement the backend API endpoints...
+
+Integrate the provided Python code...
+
+Build the frontend components...
+
+Connect frontend components to the corresponding backend API endpoints...
+
+Thoroughly test all features...
+
+Generate the CODEBASE_EXPLANATION.md file according to the specifications in Requirement 6.
+
