@@ -80,6 +80,25 @@ export class MemStorage implements IStorage {
     this.searchHistoryIdCounter = 1;
     this.contestIdCounter = 1;
     this.participationIdCounter = 1;
+    
+    // Create a default user for testing
+    this.seedDefaultUser();
+  }
+  
+  // Seed a default user with platform usernames
+  private async seedDefaultUser() {
+    // Create test user
+    const user = await this.createUser({
+      username: "demo",
+      password: "$2b$10$9uCFm2F1XhNiAZjiwC2v2OGbKwBQHEwhNGWL1Ip8mDQvYTyxFpNlu" // "password"
+    });
+    
+    // Update user with platform links
+    await this.updateUserLinks(user.id, {
+      leetcodeUsername: "johndoe",
+      codeforcesUsername: "tester",
+      gfgUsername: "gfg_user"
+    });
   }
 
   // Auth & User
